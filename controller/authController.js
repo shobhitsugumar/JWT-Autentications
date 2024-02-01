@@ -10,6 +10,23 @@ const signToken = (id) => {
   }));
 };
 
+const creatSendToken = (user, statuscode, res) => {
+  const token = signToken(user._id);
+  res.cookie("jwt", token, {
+    expires: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+    secure: true,
+    httpOnly: true,
+  });
+  user.password = undefined;
+  res.status(statuscode).json({
+    status: "success",
+    token,
+    data: {
+      user,
+    },
+  });
+};
+
 exports.signup = catchAsync(async (req, res, next) => {
   const newUser = await User.create({
     fullname: req.body.fullname,
@@ -19,16 +36,7 @@ exports.signup = catchAsync(async (req, res, next) => {
     confirmpassword: req.body.confirmpassword,
   });
 
-  //create the token
-  signToken(newUser.id);
-
-  res.status(200).json({
-    status: "success",
-    token,
-    data: {
-      newUser,
-    },
-  });
+  creatSendToken(newUser, 201, res);
 });
 
 exports.login = catchAsync(async (req, res, next) => {
@@ -48,15 +56,7 @@ exports.login = catchAsync(async (req, res, next) => {
 
   //3 if everything is ok create the token and send token to the client
 
-  signToken(user.id);
-
-  res.status(200).json({
-    status: "success",
-    token,
-    data: {
-      user,
-    },
-  });
+  creatSendToken(user, 200, res);
 });
 
 //protected route
@@ -74,7 +74,6 @@ exports.protected = catchAsync(async (req, res, next) => {
   }
 
   const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
-  console.log(decoded);
 
   const CurrentUser = await User.findById(decoded.id);
   if (!CurrentUser) {
@@ -92,13 +91,22 @@ exports.protected = catchAsync(async (req, res, next) => {
   next();
 });
 
-exports.profile = catchAsync(async (req, res) => {
-  console.log("requser=", req.user);
-  const profile = await User.findOne({ fullname: req.user.fullname });
-  res.status(200).json({
-    status: "success",
-    data: {
-      profile,
-    },
-  });
-});
+//restricted only to the admin
+exports.restrictTo = (role) => {
+  console.log("roleeeeeee:", role);
+  return (req, res, next) => {
+    if (!role !== req.user.role) {
+      return next(
+        new AppError("you dont have permission to access this page", 403)
+      );
+    }
+    next();
+  };
+};
+
+//to be added later
+/*
+exports.forgotPassword = () => {};
+exports.resetPassword = () => {};
+
+*/
